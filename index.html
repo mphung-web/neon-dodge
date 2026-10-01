@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>NEON DODGE</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#070a18;color:#fff}
+body{display:grid;place-items:center}
+#wrap{position:relative;width:min(100vw,1100px);height:min(100vh,700px);overflow:hidden;background:radial-gradient(circle at 50% 40%,#18265d 0,#0b1230 38%,#050714 100%);border:1px solid #33428b;box-shadow:0 0 70px #304dff33;border-radius:18px}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+#hud{position:absolute;top:18px;left:20px;right:20px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+.card{background:#07102bcc;border:1px solid #6c7cff55;backdrop-filter:blur(10px);border-radius:14px;padding:10px 16px;min-width:125px}
+.label{font-size:11px;letter-spacing:2px;color:#91a1ff}.value{font-size:25px;font-weight:800}
+#center{position:absolute;inset:0;display:grid;place-items:center;text-align:center}
+.panel{padding:35px 42px;border:1px solid #7382ff66;background:#070b1dcc;backdrop-filter:blur(14px);border-radius:24px;box-shadow:0 20px 80px #0008}
+h1{margin:0;font-size:clamp(42px,8vw,82px);letter-spacing:8px;background:linear-gradient(90deg,#6df,#b98cff,#fff);-webkit-background-clip:text;color:transparent}
+.sub{color:#aeb9df;margin:8px 0 24px}
+button{border:0;border-radius:12px;padding:13px 27px;background:linear-gradient(90deg,#536dff,#9b5cff);color:#fff;font-weight:800;font-size:16px;cursor:pointer;box-shadow:0 8px 30px #536dff55}
+button:hover{transform:translateY(-2px);filter:brightness(1.1)}
+#mobile{position:absolute;bottom:20px;left:20px;right:20px;display:none;justify-content:space-between;pointer-events:none}
+.ctrl{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:#ffffff12;border:1px solid #ffffff33;font-size:24px;pointer-events:auto;user-select:none}
+#hint{margin-top:16px;font-size:12px;color:#7481a8}
+@media(max-width:700px){#wrap{border-radius:0}.card{padding:7px 11px}.value{font-size:20px}#mobile{display:flex}.panel{margin:20px;padding:25px 20px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+<canvas id="game"></canvas>
+<div id="hud">
+  <div class="card"><div class="label">SCORE</div><div class="value" id="score">0</div></div>
+  <div class="card"><div class="label">BEST</div><div class="value" id="best">0</div></div>
+  <div class="card"><div class="label">LEVEL</div><div class="value" id="level">1</div></div>
+</div>
+<div id="center">
+  <div class="panel">
+    <h1 id="title">NEON DODGE</h1>
+    <div class="sub" id="subtitle">Dodge the falling energy shards. Survive as long as you can.</div>
+    <button id="start">START GAME</button>
+    <div id="hint">PC: ← → / A D &nbsp; • &nbsp; Mobile: buttons below</div>
+  </div>
+</div>
+<div id="mobile"><div class="ctrl" id="left">◀</div><div class="ctrl" id="right">▶</div></div>
+</div>
+<script>
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const wrap=document.getElementById('wrap');
+let W,H,dpr,playing=false,last=0,score=0,level=1,speed=1,spawn=0,shake=0;
+let best=+localStorage.neonBest||0;
+document.getElementById('best').textContent=best;
+const keys={left:false,right:false};
+const player={x:0,y:0,w:30,h:30,v:0};
+let shards=[],stars=[];
+function resize(){
+ dpr=Math.min(devicePixelRatio||1,2); W=wrap.clientWidth; H=wrap.clientHeight;
+ canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+ player.y=H-82;if(!playing)player.x=W/2;
+ stars=Array.from({length:90},()=>({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.7+.2,a:Math.random()}));
+}
+addEventListener('resize',resize);resize();
+function reset(){
+ score=0;level=1;speed=1;spawn=0;shards=[];shake=0;
+ player.x=W/2;player.y=H-82;playing=true;
+ document.getElementById('center').style.display='none';
+}
+function end(){
+ playing=false;best=Math.max(best,Math.floor(score));localStorage.neonBest=best;
+ document.getElementById('best').textContent=best;
+ document.getElementById('title').textContent='GAME OVER';
+ document.getElementById('subtitle').textContent=`Score: ${Math.floor(score)}  •  Press START to try again`;
+ document.getElementById('start').textContent='PLAY AGAIN';
+ document.getElementById('center').style.display='grid';
+ shake=14;
+}
+document.getElementById('start').onclick=reset;
+addEventListener('keydown',e=>{
+ if(['ArrowLeft','ArrowRight','a','d','A','D'].includes(e.key))e.preventDefault();
+ if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A')keys.left=true;
+ if(e.key==='ArrowRight'||e.key==='d'||e.key==='D')keys.right=true;
+ if(e.key==='Enter'&&!playing)reset();
+});
+addEventListener('keyup',e=>{
+ if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A')keys.left=false;
+ if(e.key==='ArrowRight'||e.key==='d'||e.key==='D')keys.right=false;
+});
+for(const [id,k] of [['left','left'],['right','right']]){
+ const el=document.getElementById(id);
+ el.onpointerdown=e=>{e.preventDefault();keys[k]=true};
+ el.onpointerup=el.onpointercancel=el.onpointerleave=()=>keys[k]=false;
+}
+function spawnShard(){
+ const s=18+Math.random()*18;
+ shards.push({x:s+Math.random()*(W-s*2),y:-40,w:s,h:s*1.35,v:190+Math.random()*130+level*18,rot:Math.random()*6.28,vr:(Math.random()-.5)*4});
+}
+function hit(a,b){
+ return Math.abs(a.x-b.x)<(a.w+b.w)*.45 && Math.abs(a.y-b.y)<(a.h+b.h)*.45;
+}
+function draw(){
+ ctx.clearRect(0,0,W,H);
+ const g=ctx.createRadialGradient(W/2,H*.45,20,W/2,H*.45,Math.max(W,H)*.7);
+ g.addColorStop(0,'#18265d');g.addColorStop(1,'#050714');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ ctx.save();
+ for(const s of stars){s.a+=.015;ctx.globalAlpha=.25+.3*Math.sin(s.a);ctx.fillStyle='#a8c8ff';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,7);ctx.fill()}
+ ctx.restore();
+ ctx.strokeStyle='#5f72ff18';ctx.lineWidth=1;
+ for(let x=0;x<W;x+=55){ctx.beginPath();ctx.moveTo(x,H*.55);ctx.lineTo(x-80,H);ctx.stroke()}
+ for(let y=H*.55;y<H;y+=42){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+ for(const s of shards){
+   ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.rot);
+   ctx.shadowBlur=22;ctx.shadowColor='#ff4f9a';ctx.fillStyle='#ff4f9a';
+   ctx.beginPath();ctx.moveTo(0,-s.h/2);ctx.lineTo(s.w/2,0);ctx.lineTo(0,s.h/2);ctx.lineTo(-s.w/2,0);ctx.closePath();ctx.fill();
+   ctx.shadowBlur=0;ctx.fillStyle='#ffd4ea';ctx.beginPath();ctx.arc(0,0,3,0,7);ctx.fill();ctx.restore();
+ }
+ ctx.save();ctx.translate(player.x,player.y);
+ ctx.shadowBlur=28;ctx.shadowColor='#57e8ff';ctx.fillStyle='#57e8ff';
+ ctx.beginPath();ctx.moveTo(0,-22);ctx.lineTo(18,13);ctx.lineTo(0,8);ctx.lineTo(-18,13);ctx.closePath();ctx.fill();
+ ctx.shadowBlur=0;ctx.fillStyle='#e9ffff';ctx.beginPath();ctx.arc(0,-4,5,0,7);ctx.fill();
+ ctx.restore();
+}
+function loop(t){
+ const dt=Math.min((t-last)/1000,.033);last=t;
+ if(playing){
+   score+=dt*10;level=1+Math.floor(score/100);speed=1+level*.08;
+   document.getElementById('score').textContent=Math.floor(score);
+   document.getElementById('level').textContent=level;
+   player.v=(keys.right?1:0)-(keys.left?1:0);
+   player.x+=player.v*520*dt;player.x=Math.max(25,Math.min(W-25,player.x));
+   spawn-=dt;
+   if(spawn<=0){spawn=Math.max(.23,.7-level*.025);spawnShard()}
+   for(let i=shards.length-1;i>=0;i--){
+     const s=shards[i];s.y+=s.v*speed*dt;s.rot+=s.vr*dt;
+     if(hit({x:player.x,y:player.y,w:28,h:28},s)){end();break}
+     if(s.y>H+60)shards.splice(i,1);
+   }
+ }
+ draw();
+ if(shake>0){shake-=.5}
+ requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
